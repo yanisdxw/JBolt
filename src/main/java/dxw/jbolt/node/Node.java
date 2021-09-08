@@ -80,38 +80,39 @@ public class Node {
         }else {
             page.flags |= branchPageFlag;
         }
+        page.setFlags(page.flags);
         if(inodes.size()>=0xFFFF){
             throw new Exception(String.format("inode overflow: %d (pgid=%d)", inodes.size(), page.id));
         }
         page.count = (short) inodes.size();
+        page.setCount(page.count);
         // Stop here if there are no items to write.
         if(page.count==0){
             return;
         }
-        page.offset = leafPageElementSize*page.count;
         // Loop over each item and write it to the page.
         byte[] b = page.data;
         int offset = 0;
         for (int i = 0; i < inodes.size(); i++) {
             if(isLeaf){
                 LeafPageElement element = new LeafPageElement();
-                element.pos = page.offset + offset - i*leafPageElementSize;
+                element.pos = offset + (page.count-i)*leafPageElementSize;
                 element.flags = inodes.get(i).flags;
                 element.ksize = inodes.get(i).key.length;
                 element.vsize = inodes.get(i).value.length;
                 page.setLeafPageElement(i,element);
                 /** &leafPageElement + pos == &key
                  *  &leafPageElement + pos + ksize == &val */
-                System.arraycopy(inodes.get(i).key,0,b,element.pos+i*leafPageElementSize,element.ksize);
-                System.arraycopy(inodes.get(i).value,0,b,element.pos+i*leafPageElementSize+element.ksize,element.vsize);
+                System.arraycopy(inodes.get(i).key,0,b,pageHeaderSize+i*leafPageElementSize+element.pos,element.ksize);
+                System.arraycopy(inodes.get(i).value,0,b,pageHeaderSize+i*leafPageElementSize+element.pos+element.ksize,element.vsize);
                 offset += element.ksize + element.vsize;
             }else {
                 BranchPageElement element = new BranchPageElement();
-                element.pos = page.offset + offset - i*branchPageElementSize;
+                element.pos = offset - (page.count-i)*branchPageElementSize;
                 element.ksize = inodes.get(i).key.length;
                 element.pgid = inodes.get(i).pgid;
                 page.setBranchPageElement(i,element);
-                System.arraycopy(inodes.get(i).key,0,b,element.pos+i*leafPageElementSize,element.ksize);
+                System.arraycopy(inodes.get(i).key,0,b,pageHeaderSize+i*branchPageElementSize+element.pos,element.ksize);
                 offset += element.ksize;
             }
             // If the length of key+value is larger than the max allocation size

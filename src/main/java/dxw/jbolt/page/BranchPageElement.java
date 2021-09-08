@@ -8,8 +8,14 @@ public class BranchPageElement {
     public int pos;
     public int ksize;
     public long pgid;
+
+    private byte[] buf;
+    private int index;
+
     // key returns a byte slice of the node key.
     public byte[] key(){
         return new byte[]{};
     }
+
+
 }

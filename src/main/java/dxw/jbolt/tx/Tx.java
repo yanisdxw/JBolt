@@ -2,7 +2,7 @@ package dxw.jbolt.tx;
 
 import dxw.jbolt.bucket.Bucket;
 import dxw.jbolt.db.DB;
-import dxw.jbolt.db.Meta;
+import dxw.jbolt.page.Meta;
 import dxw.jbolt.page.Page;
 
 import java.util.Map;

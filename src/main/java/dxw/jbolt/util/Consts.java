@@ -9,9 +9,11 @@ public class Consts {
     public static int branchPageElementSize = 16;
     // freelistPageElement size
     public static int freelistPageElementSize = 8;
+    // pageSize
+    public static int pageSize = 4096;
 
     public static int minKeysPerPage = 2;
-    public static int pageHeaderSize = 0;
+    public static int pageHeaderSize = 16;
 
     public static double minFillPercent = 0.1;
     public static double maxFillPercent = 1.0;

@@ -213,8 +213,10 @@ public class FreeList {
     // reindex rebuilds the free cache based on available and pending free lists.
     public void reindex(){
         cache = new HashMap<>();
-        for (long id = 0; id < ids.length; id++) {
-            cache.put(id,true);
+        if(ids!=null){
+            for (long id = 0; id < ids.length; id++) {
+                cache.put(id,true);
+            }
         }
         pending.forEach((id, pendingIDs)->{
             for (long pendingID = 0; pendingID < pendingIDs.length; pendingID++) {

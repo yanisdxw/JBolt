@@ -1,13 +1,12 @@
 package dxw.jbolt.page;
 
-import dxw.jbolt.db.Meta;
-
 import java.util.ArrayList;
 import java.util.List;
 
 import static dxw.jbolt.util.Consts.*;
+import static dxw.jbolt.util.IOUtils.*;
 
-public class Page {
+public class Page implements BytesData {
 
     //pageHeader;
     public long id; // pageid
@@ -17,9 +16,9 @@ public class Page {
 
     //pageData;
     public byte[] data; //数据块,存放node
-
-    //ptr
     public int offset; // 真正存储数据的指向（仅内存中的标识，并不落盘）
+    //ptr
+    public int ptr; //在buf中的起始位置
 
     public Page(){
 
@@ -27,28 +26,38 @@ public class Page {
 
     public Page(byte[] buf){
         this.data = buf;
-        this.offset = 0;
     }
 
-    public Page(byte[] buf, int offset){
+    public Page(byte[] buf, int ptr){
         this.data = buf;
-        this.offset = offset;
+        this.offset = ptr;
+    }
+
+    public static Page getPage(byte[] buf){
+        Page page = new Page(buf);
+        page.id = readLong(buf,0);
+        page.flags = readShort(buf,8);
+        page.count = readShort(buf,10);
+        page.overflow = readInt(buf,12);
+        page.data = buf;
+        page.offset = pageHeaderSize;
+        return page;
     }
 
     public void setFlags(int flags){
         this.flags = (short) flags;
-        writeShort(data,8,flags);
+        writeShort(data,ptr+8,flags);
     }
 
     public void setCount(int count){
         this.count = (short) count;
-        this.offset = leafPageElementSize*count;
-        writeShort(data,10,count);
+        this.offset = leafPageElementSize*count + pageHeaderSize;
+        writeShort(data,ptr+10,count);
     }
 
     public void setId(long id){
         this.id = id;
-        writeLong(data,0,id);
+        writeLong(data, ptr, id);
     }
     // typ returns a human readable page type string used for debugging.
     public String type(){
@@ -57,23 +66,23 @@ public class Page {
 
     // leafPageElement retrieves the leaf node by index
     public LeafPageElement getLeafPageElement(int index){
-        byte[] element = readBytes(leafPageElementSize*index,leafPageElementSize);
+        byte[] element = readBytes(ptr+pageHeaderSize+leafPageElementSize*index,leafPageElementSize);
         LeafPageElement leafPageElement = new LeafPageElement();
         leafPageElement.flags = readInt(element,0);
         leafPageElement.pos = readInt(element,4);
         leafPageElement.ksize = readInt(element,8);
         leafPageElement.vsize = readInt(element,12);
-        leafPageElement.buf = data;
-        leafPageElement.index = index;
+        leafPageElement.setBufData(data);
+        leafPageElement.setIndex(index);
         return leafPageElement;
     }
 
     // write leafPageElement to page
     public void setLeafPageElement(int index, LeafPageElement leafPageElement){
-        writeInt(data, index*leafPageElementSize, leafPageElement.flags);
-        writeInt(data, index*leafPageElementSize+4,leafPageElement.pos);
-        writeInt(data, index*leafPageElementSize+8,leafPageElement.ksize);
-        writeInt(data, index*leafPageElementSize+12,leafPageElement.vsize);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize, leafPageElement.flags);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize+4,leafPageElement.pos);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize+8,leafPageElement.ksize);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize+12,leafPageElement.vsize);
     }
 
     // leafPageElements retrieves a list of leaf nodes.
@@ -89,7 +98,7 @@ public class Page {
 
     // branchPageElement retrieves the branch node by index
     public BranchPageElement getBranchPageElement(int index){
-        byte[] element = readBytes(branchPageElementSize*index,branchPageElementSize);
+        byte[] element = readBytes(ptr+branchPageElementSize*index,branchPageElementSize);
         BranchPageElement leafPageElement = new BranchPageElement();
         leafPageElement.pos = readInt(element,0);
         leafPageElement.ksize = readInt(element,4);
@@ -99,9 +108,9 @@ public class Page {
 
     //
     public void setBranchPageElement(int index, BranchPageElement branchPageElement){
-        writeInt(data, index*leafPageElementSize+4,branchPageElement.pos);
-        writeInt(data, index*leafPageElementSize+8,branchPageElement.ksize);
-        writeLong(data, index*leafPageElementSize+12,branchPageElement.pgid);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize+4,branchPageElement.pos);
+        writeInt(data, ptr+pageHeaderSize+index*leafPageElementSize+8,branchPageElement.ksize);
+        writeLong(data, ptr+pageHeaderSize+index*leafPageElementSize+12,branchPageElement.pgid);
     }
 
     // branchPageElements retrieves a list of branch nodes.
@@ -117,24 +126,47 @@ public class Page {
 
     //
     public void setFreeList(int index, long pgid){
-        writeLong(data, 16+index*freelistPageElementSize, pgid);
+        writeLong(data, ptr+pageHeaderSize+index*freelistPageElementSize, pgid);
     }
 
     public long[] getPgids(int from, int to){
         long[] ids = new long[to-from];
         for (int i = from; i < to; i++) {
-            long id = readLong(data,16+freelistPageElementSize*i);
+            long id = readLong(data,ptr+pageHeaderSize+freelistPageElementSize*i);
             ids[i] = id;
         }
         return ids;
     }
 
-    public Meta getMeta(int index){
-        return new Meta(index);
+    //从字节数组中读取meta数据
+    public Meta getMeta(){
+        byte[] data = readBytes(ptr+pageHeaderSize,pageSize-pageHeaderSize);
+        Meta meta = new Meta();
+        meta.magic = readInt(data,0);
+        meta.version = readInt(data,4);
+        meta.pageSize = readInt(data,8);
+        meta.flag = readInt(data,12);
+        meta.root = readLong(data, 16);
+        meta.sequence = readLong(data, 24);
+        meta.freelist = readLong(data,32);
+        meta.pgid = readLong(data,40);
+        meta.txid = readLong(data,48);
+        meta.checksum = readInt(data,56);
+        return meta;
     }
 
+    //将meta数据写入数组中
     public void setMeta(Meta meta){
-
+        writeInt(data, ptr+pageHeaderSize, meta.magic);
+        writeInt(data, ptr+pageHeaderSize+4,meta.version);
+        writeInt(data,ptr+pageHeaderSize+8,meta.pageSize);
+        writeInt(data,ptr+pageHeaderSize+12,meta.flag);
+        writeLong(data,ptr+pageHeaderSize+16,meta.root);
+        writeLong(data,ptr+pageHeaderSize+24,meta.sequence);
+        writeLong(data,ptr+pageHeaderSize+32,meta.freelist);
+        writeLong(data,ptr+pageHeaderSize+40,meta.pgid);
+        writeLong(data,ptr+pageHeaderSize+48,meta.txid);
+        writeLong(data,ptr+pageHeaderSize+56,meta.checksum);
     }
 
     //// dump writes n bytes of the page to STDERR as hex output.
@@ -151,52 +183,8 @@ public class Page {
         return result;
     }
 
-    private void writeShort(byte[] b, int offset, int i){
-        b[offset++] = (byte) (i &0xff);
-        b[offset++] = (byte) (i>>>8);
-    }
-
-    private short readShort(byte[] b, int offset){
-        short i = (short) (b[offset++] & 0xff);
-        i |= (b[offset++] & 0xff)<<8;
-        return i;
-    }
-
-    private void writeInt(byte[] buffer, int offset, int i) {
-        buffer[offset++] = (byte) (i & 0xff);
-        buffer[offset++] = (byte) (i >>> 8);
-        buffer[offset++] = (byte) (i >>> 16);
-        buffer[offset++] = (byte) (i >>> 24);
-    }
-
-    private int readInt(byte[] b, int offset) {
-        int i = b[offset++] & 0xff;
-        i |= (b[offset++] & 0xff) << 8;
-        i |= (b[offset++] & 0xff) << 16;
-        i |= (b[offset++] & 0xff) << 24;
-        return i;
-    }
-
-    private void writeLong(byte[] buffer, int offset, long i) {
-        buffer[offset++] = (byte) (i & 0xff);
-        buffer[offset++] = (byte) (i >>> 8);
-        buffer[offset++] = (byte) (i >>> 16);
-        buffer[offset++] = (byte) (i >>> 24);
-        buffer[offset++] = (byte) (i >>> 32);
-        buffer[offset++] = (byte) (i >>> 40);
-        buffer[offset++] = (byte) (i >>> 48);
-        buffer[offset++] = (byte) (i >>> 56);
-    }
-
-    public long readLong(byte[] b, int offset) {
-        long l = (b[offset++] & 0xff);
-        l |= (long) (b[offset++] & 0xff) << 8;
-        l |= (long) (b[offset++] & 0xff) << 16;
-        l |= (long) (b[offset++] & 0xff) << 24;
-        l |= (long) (b[offset++] & 0xff) << 32;
-        l |= (long) (b[offset++] & 0xff) << 40;
-        l |= (long) (b[offset++] & 0xff) << 48;
-        l |= (long) (b[offset++] & 0xff) << 56;
-        return l;
+    @Override
+    public byte[] toBytes() {
+        return new byte[0];
     }
 }

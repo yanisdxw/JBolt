@@ -2,6 +2,7 @@ package dxw.jbolt.util;
 
 import org.junit.Test;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -39,7 +40,20 @@ public class UtilsTest {
 //        int[] c = Arrays.copyOfRange(a,5,10);
 //        Utils.printArray(b);
 //        Utils.printArray(c);
+        byte[] out = bigIntToByteArray(4096);
+        out = bigIntToByteArray(10);
+        out = bigIntToByteArray(16);
+        out = bigIntToByteArray(48);
+        out = bigIntToByteArray(128);
+        out = bigIntToByteArray(512);
+        out = bigIntToByteArray(1024);
         System.out.println(Utils.getOsPageSize());
+
+    }
+
+    private byte[] bigIntToByteArray( final int i ) {
+        BigInteger bigInt = BigInteger.valueOf(i);
+        return bigInt.toByteArray();
     }
 
     @Test

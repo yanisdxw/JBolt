@@ -25,6 +25,7 @@ public class Bucket {
     public Map<Long,Node> nodes;              // node cache
     // This is non-persisted across transactions so it must be set in every Tx.
     public double fillPercent;
+    // bucket represents the on-file representation of a bucket.
     public long root;
     public long sequence;
 
@@ -35,6 +36,7 @@ public class Bucket {
     public Bucket(){
 
     }
+
     public Bucket(Tx tx){
         Bucket bucket = new Bucket();
         bucket.tx = tx;
@@ -175,6 +177,10 @@ public class Bucket {
 
         //n.write(p);
         return value;
+    }
+
+    public void dereference(){
+
     }
 
 }
