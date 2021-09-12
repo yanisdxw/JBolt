@@ -29,6 +29,20 @@ public class Node {
     public static byte metaPageFlag     = 0x04;
     public static byte freelistPageFlag = 0x10;
 
+    public Node root(){
+        if(parent==null){
+            return this;
+        }
+        return parent.root();
+    }
+
+    public int minKeys(){
+        if(isLeaf){
+            return 1;
+        }
+        return 2;
+    }
+
     public Node(){
 
     }
@@ -282,6 +296,53 @@ public class Node {
         }
     }
 
+    public void rebalance() throws Exception {
+        if(!unbalanced){
+            return;
+        }
+        unbalanced = false;
+        bucket.tx.stats.rebalance++;
+        double threshold = bucket.tx.db.pageSize/4;
+        if(size()>threshold && inodes.size()>minKeys()){
+            return;
+        }
+        // Root node has special handling.
+        if(parent==null){
+            if(!isLeaf && inodes.size()==1){
+                Node child = bucket.node(inodes.get(0).pgid,this);
+                isLeaf = child.isLeaf;
+                inodes = child.inodes;
+                children = child.children;
+                for(iNode inode:inodes){
+                    Node c = bucket.nodes.get(inode.pgid);
+                    if(c!=null){
+                        c.parent = this;
+                    }
+                }
+                child.parent = null;
+                bucket.nodes.remove(child.pgid);
+                child.free();
+            }
+            return;
+        }
+        // If node has no keys then just remove it.
+        if(inodes.size()==0){
+            parent.del(key);
+            parent.children.remove(this);
+            bucket.nodes.remove(pgid);
+            free();
+        }
+        parent.rebalance();
+    }
+
+
+
+    public void free() throws Exception {
+        if(pgid!=0){
+            bucket.tx.db.freeList.free(bucket.tx.meta.txid,bucket.tx.page(pgid));
+            pgid = 0;
+        }
+    }
     // inode represents an internal node inside of a node.
     // It can be used to point to elements in a page or point
     // to an element which hasn't been added to a page yet.

@@ -15,6 +15,7 @@ import dxw.jbolt.util.Utils;
 
 import java.io.File;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
@@ -83,6 +84,7 @@ public class DB {
         metalock = new ReentrantLock();
         mmaplock = new ReentrantReadWriteLock();
         statlock = new ReentrantReadWriteLock();
+        txs = new ArrayList<>();
     }
 
 
@@ -276,7 +278,7 @@ public class DB {
         return Page.getPage(pageBuf);
     }
 
-    public Meta meta() throws Exception {
+    public Meta meta() {
         Meta metaA = meta00;
         Meta metaB = meta01;
         if(meta01.txid>meta00.txid){
