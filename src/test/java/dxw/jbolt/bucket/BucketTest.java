@@ -15,7 +15,7 @@ public class BucketTest {
     public void TestBucket_Get_NonExistent(){
         DB db = DB.MustOpenDB();
         db.update(tx->{
-            Bucket b = tx.createBUcket(new String("widgets").getBytes());
+            Bucket b = tx.createBUcket("widgets".getBytes());
             byte[] v = b.get("foo".getBytes());
             assertTrue(v==null);
         });

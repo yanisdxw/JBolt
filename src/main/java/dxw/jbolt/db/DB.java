@@ -353,6 +353,44 @@ public class DB {
         path = "";
     }
 
+    // allocate returns a contiguous block of memory starting at a given page.
+    public Page allocate(int count) throws Exception {
+        byte[] buf = new byte[count*pageSize];
+        Page p = new Page();
+        p.data = buf;
+        p.overflow = count-1;
+        // Use pages from the freelist if they are available.
+        p.id = freeList.allocate(count);
+        if(p.id!=0){
+            return p;
+        }
+        // Resize mmap() if we're at the end.
+        p.id = rwtx.meta.pgid;
+        int minsz = (int)(p.id + count + 1)*pageSize;
+        if(minsz>=datasz){
+            mmap(minsz);
+        }
+
+        // Move the page id high water mark.
+        rwtx.meta.pgid += count;
+        return p;
+    }
+
+    // grow grows the size of the database to the given sz.
+    public void grow(int sz){
+        if(sz<=filesz){
+            return;
+        }
+        if(datasz<allocSize){
+            sz = datasz;
+        }else {
+            sz += allocSize;
+        }
+        if(!noGrowSync&&readOnly){
+
+        }
+        filesz = sz;
+    }
 
     public static DB MustOpenDB() throws Exception {
         DB db = new DB().Open("C:\\Users\\yanis\\Desktop\\JBolt\\test.txt","rw",null);

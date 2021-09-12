@@ -130,7 +130,9 @@ public class FreeList {
                 pending.remove(tid);
             }
         });
-        Collections.sort(ids);
+        if(CollectionUtils.isNotEmpty(ids)){
+            Collections.sort(ids);
+        }
     }
 
     // rollback removes the pages from a given pending tx.
