@@ -1,5 +1,7 @@
 package dxw.jbolt.page;
 
+import org.apache.commons.collections4.CollectionUtils;
+
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -12,13 +14,14 @@ import static dxw.jbolt.util.Consts.pageHeaderSize;
  * 如果ids数量超过0xFFFF（page.count的最大值），则会把ptr指向的第一个位置作为ids的长度。
  */
 public class FreeList {
-    public long[] ids;
+    public List<Long> ids;
     public Map<Long,long[]> pending;
     public Map<Long,Boolean> cache;
 
     public FreeList() {
         pending = new HashMap<>();
         cache = new HashMap<>();
+        ids = new ArrayList<>();
     }
 
     // size returns the size of the page after serialization.
@@ -35,7 +38,7 @@ public class FreeList {
     }
 
     public int free_count(){
-        return ids.length;
+        return ids.size();
     }
 
     public int pending_count(){
@@ -46,43 +49,43 @@ public class FreeList {
         return count.get();
     }
 
-    public long[] copyall(long[] dst){
-        TreeSet<Long> m = new TreeSet<>();
+    public void copyall(List<Long> ids){
         for(Map.Entry<Long,long[]> entry:pending.entrySet()){
-            m.addAll(toList(entry.getValue()));
+            long[] tmp = entry.getValue();
+            for (int i = 0; i < tmp.length; i++) {
+                ids.add(tmp[i]);
+            }
         }
-        List<Long> tmp = toList(dst);
-        m.addAll(tmp);
-        return toArrays(m);
+        Collections.sort(ids);
     }
 
     // allocate returns the starting page id of a contiguous list of pages of a given size.
     // If a contiguous block cannot be found then 0 is returned.
     public long allocate(int n) throws Exception {
-        if(ids.length==0){
+        if(ids.size()==0){
             return 0;
         }
         long initial =0 , previd = 0;
-        for (int i = 0; i < ids.length; i++) {
-            if(ids[i]<=1){
-                throw new Exception(String.format("invalid page allocation: %d", ids[i]));
+        for (int i = 0; i < ids.size(); i++) {
+            if(ids.get(i)<=1){
+                throw new Exception(String.format("invalid page allocation: %d", ids.get(i)));
             }
             // Reset initial page if this is not contiguous.
-            if(previd==0||ids[i]-previd!=1){
-                initial = ids[i];
+            if(previd==0||ids.get(i)-previd!=1){
+                initial = ids.get(i);
             }
             // If we found a contiguous block then remove it and return it.
-            if(ids[i]-initial+1==n){
+            if(ids.get(i)-initial+1==n){
                 // If we're allocating off the beginning then take the fast path
                 // and just adjust the existing slice. This will use extra memory
                 // temporarily but the append() in free() will realloc the slice
                 // as is necessary.
                 if(i+1==n){
-                    ids = Arrays.copyOfRange(ids, i+1, ids.length);
+                    ids = ids.subList(i+1,ids.size());
                 }else {
-                    long[] tmp = new long[ids.length-n];
-                    System.arraycopy(ids, 0,tmp,0,i+1-n);
-                    System.arraycopy(ids,i+1,tmp,i+1-n,ids.length-1-i);
+                    List<Long> tmp = new ArrayList<>();
+                    tmp.addAll(ids.subList(0,i+1-n));
+                    tmp.addAll(ids.subList(i+1,ids.size()));
                     ids = tmp;
                 }
                 for (int j = 0; j < n; j++) {
@@ -90,7 +93,7 @@ public class FreeList {
                 }
                 return initial;
             }
-            previd = ids[i];
+            previd = ids.get(i);
         }
         return 0;
     }
@@ -127,8 +130,7 @@ public class FreeList {
                 pending.remove(tid);
             }
         });
-        m.addAll(toList(ids));
-        ids = toArrays(m);
+        Collections.sort(ids);
     }
 
     // rollback removes the pages from a given pending tx.
@@ -160,7 +162,7 @@ public class FreeList {
             ids = null;
         }else {
             ids = p.getPgids(idx,count);
-            Arrays.sort(ids);
+            Collections.sort(ids);
         }
         reindex();
     }
@@ -177,15 +179,15 @@ public class FreeList {
             p.setCount(lenids);
         } else if (lenids<0xFFFF) {
             p.setCount(lenids);
-            long[] tmp = copyall(ids);
-            for (int i = 0; i < tmp.length; i++) {
-                p.setFreeList(i,tmp[i]);
+            copyall(ids);
+            for (int i = 0; i < ids.size(); i++) {
+                p.setFreeList(i,ids.get(i));
             }
         } else {
             p.setCount(0xFFFF);
-            long[] tmp = copyall(ids);
-            for (int i = 0; i < tmp.length; i++) {
-                p.setFreeList(i,tmp[i]);
+            copyall(ids);
+            for (int i = 0; i < ids.size(); i++) {
+                p.setFreeList(i,ids.get(i));
             }
         }
     }
@@ -199,13 +201,13 @@ public class FreeList {
             }
         });
         List<Long> a = new ArrayList<>();
-        for (int i = 0; i < ids.length; i++) {
-            long id = ids[i];
+        for (int i = 0; i < ids.size(); i++) {
+            long id = ids.get(i);
             if(pcache.get(id)){
                 a.add(id);
             }
         }
-        ids = toArrays(a);
+        ids = a;
         reindex();
     }
 
@@ -214,7 +216,7 @@ public class FreeList {
     public void reindex(){
         cache = new HashMap<>();
         if(ids!=null){
-            for (long id = 0; id < ids.length; id++) {
+            for (long id = 0; id < ids.size(); id++) {
                 cache.put(id,true);
             }
         }

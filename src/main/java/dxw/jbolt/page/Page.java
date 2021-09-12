@@ -1,7 +1,10 @@
 package dxw.jbolt.page;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static dxw.jbolt.util.Consts.*;
 import static dxw.jbolt.util.IOUtils.*;
@@ -129,13 +132,13 @@ public class Page implements BytesData {
         writeLong(data, ptr+pageHeaderSize+index*freelistPageElementSize, pgid);
     }
 
-    public long[] getPgids(int from, int to){
+    public List<Long> getPgids(int from, int to){
         long[] ids = new long[to-from];
         for (int i = from; i < to; i++) {
             long id = readLong(data,ptr+pageHeaderSize+freelistPageElementSize*i);
             ids[i] = id;
         }
-        return ids;
+        return Arrays.stream(ids).boxed().collect(Collectors.toList());
     }
 
     //从字节数组中读取meta数据
